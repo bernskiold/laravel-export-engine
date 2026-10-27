@@ -1,0 +1,26 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - src
+
+    level: 6
+
+    excludePaths:
+        - vendor
+
+    ignoreErrors:
+        # Traits are used by the components of the host application, not in the package.
+        - identifier: trait.unused
+
+        # The OpenSpout 4 branch of the compatibility class. PHPStan reads OpenSpout 5,
+        # which has no setters. The tests run the branch against OpenSpout 4.
+        -
+            message: '#(setFontBold|setFreezeRow|setFreezeColumn|Border::BOTTOM|Border::WIDTH_MEDIUM|SHOULD_USE_INLINE_STRINGS)#'
+            path: src/Support/OpenSpout.php
+
+        # Simple exporters take their own constructor arguments, so make() passes them on.
+        -
+            identifier: new.static
+            path: src/SimpleExporter.php
