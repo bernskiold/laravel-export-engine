@@ -6,7 +6,9 @@ use Bernskiold\ExportEngine\Console\SweepExportsCommand;
 use Bernskiold\ExportEngine\Events\ExportFailed;
 use Bernskiold\ExportEngine\Events\ExportFinished;
 use Bernskiold\ExportEngine\Listeners\SendExportNotification;
+use Bernskiold\ExportEngine\Support\WriterTempFolders;
 use Illuminate\Foundation\Console\AboutCommand;
+use Illuminate\Queue\Events\JobTimedOut;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -21,6 +23,12 @@ class ExportEngineServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Event::listen([ExportFinished::class, ExportFailed::class], SendExportNotification::class);
+
+        /*
+         * The worker kills itself right after this event, so no `finally`
+         * block runs. The writers of the job cannot finish anyway.
+         */
+        Event::listen(JobTimedOut::class, fn () => WriterTempFolders::deleteAll());
 
         if (config('export-engine.policy') !== null) {
             Gate::policy(ExportEngine::model(), config('export-engine.policy'));

@@ -17,7 +17,7 @@ parameters:
         # The OpenSpout 4 branch of the compatibility class. PHPStan reads OpenSpout 5,
         # which has no setters. The tests run the branch against OpenSpout 4.
         -
-            message: '#(setFontBold|setFreezeRow|setFreezeColumn|Border::BOTTOM|Border::WIDTH_MEDIUM|SHOULD_USE_INLINE_STRINGS)#'
+            message: '#(setFontBold|setFreezeRow|setFreezeColumn|Border::BOTTOM|Border::WIDTH_MEDIUM|SHOULD_USE_INLINE_STRINGS|setTempFolder)#'
             path: src/Support/OpenSpout.php
 
         # Simple exporters take their own constructor arguments, so make() passes them on.

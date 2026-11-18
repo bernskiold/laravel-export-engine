@@ -8,8 +8,14 @@ use Bernskiold\ExportEngine\Enums\ExportStatus;
 use Bernskiold\ExportEngine\Models\Export;
 use Bernskiold\ExportEngine\Settings\ExportSettingsContext;
 use Bernskiold\ExportEngine\Settings\ToggleSetting;
+use Bernskiold\ExportEngine\SimpleExporter;
 use Bernskiold\ExportEngine\SpreadsheetExporter;
+use Bernskiold\ExportEngine\Support\Staging;
+use Bernskiold\ExportEngine\Support\WriterTempFolders;
 use Bernskiold\ExportEngine\Tests\Fixtures\BrandsExporter;
+use Illuminate\Contracts\Queue\Job;
+use Illuminate\Queue\Events\JobTimedOut;
+use Illuminate\Support\Facades\File;
 use Spatie\SimpleExcel\SimpleExcelReader;
 use Spatie\SimpleExcel\SimpleExcelWriter;
 
@@ -136,6 +142,92 @@ class StyledExporterForSpreadsheetTest extends SpreadsheetExporter implements Fr
     }
 }
 
+it('deletes the temporary folder of an Excel writer when the export fails', function () {
+    $tempDirectory = sys_get_temp_dir().'/export-engine-test-'.uniqid();
+    config(['export-engine.spreadsheets.temp_directory' => $tempDirectory]);
+
+    $export = Export::generate('Failing.xlsx', 'xlsx', exporter: FailingExporterForSpreadsheetTest::class);
+
+    expect(fn () => FailingExporterForSpreadsheetTest::make($export)->run())
+        ->toThrow(RuntimeException::class, 'The database went away.');
+
+    expect(File::allFiles($tempDirectory))->toBe([])
+        ->and(File::directories($tempDirectory))->toBe([])
+        ->and(Staging::path("failing-exporter-for-spreadsheet-test/{$export->uuid}.xlsx"))->not->toBeFile();
+
+    File::deleteDirectory($tempDirectory);
+});
+
+it('builds an Excel file in the temporary directory and deletes its folder after', function () {
+    $tempDirectory = sys_get_temp_dir().'/export-engine-test-'.uniqid();
+    config(['export-engine.spreadsheets.temp_directory' => $tempDirectory]);
+
+    $foldersWhileWriting = null;
+    WatchingExporterForSpreadsheetTest::$watch = function () use ($tempDirectory, &$foldersWhileWriting) {
+        $foldersWhileWriting = count(File::directories($tempDirectory));
+    };
+
+    $export = Export::generate('Watched.xlsx', 'xlsx', exporter: WatchingExporterForSpreadsheetTest::class)->dispatchSync()->refresh();
+
+    expect($foldersWhileWriting)->toBe(1)
+        ->and(rowsOf($export))->toBe([['Aviato']])
+        ->and(File::directories($tempDirectory))->toBe([]);
+
+    File::deleteDirectory($tempDirectory);
+});
+
+it('deletes the temporary folder of a simple exporter when it fails', function () {
+    $tempDirectory = sys_get_temp_dir().'/export-engine-test-'.uniqid();
+    config(['export-engine.spreadsheets.temp_directory' => $tempDirectory]);
+
+    $exporter = new class extends SimpleExporter
+    {
+        public string $directory;
+
+        protected function fileFormat(): string
+        {
+            return 'xlsx';
+        }
+
+        protected function data(SimpleExcelWriter $writer): void
+        {
+            $writer->addRow(['Aviato']);
+
+            throw new RuntimeException('The database went away.');
+        }
+
+        protected function fileName(): string
+        {
+            return 'feed.xlsx';
+        }
+
+        protected function directoryPath(): string
+        {
+            return $this->directory;
+        }
+    };
+    $exporter->directory = sys_get_temp_dir().'/export-engine-feed-'.uniqid();
+
+    expect(fn () => $exporter->run())->toThrow(RuntimeException::class, 'The database went away.');
+
+    expect(File::directories($tempDirectory))->toBe([])
+        ->and($exporter->directory.'/feed.xlsx')->not->toBeFile();
+
+    File::deleteDirectory($tempDirectory);
+    File::deleteDirectory($exporter->directory);
+});
+
+it('deletes the open temporary folders when a queued job times out', function () {
+    config(['export-engine.spreadsheets.temp_directory' => sys_get_temp_dir().'/export-engine-test-'.uniqid()]);
+
+    $folder = WriterTempFolders::create();
+    File::put("{$folder}/sheet1.xml", '<row/>');
+
+    event(new JobTimedOut('redis', Mockery::mock(Job::class)));
+
+    expect($folder)->not->toBeDirectory();
+});
+
 class SheetsExporterForSpreadsheetTest extends SpreadsheetExporter implements WithHeader
 {
     public function header(): array
@@ -173,5 +265,27 @@ class SettingsExporterForSpreadsheetTest extends SpreadsheetExporter implements 
         }
 
         expect(static::$reads)->toBe(1);
+    }
+}
+
+class FailingExporterForSpreadsheetTest extends SpreadsheetExporter
+{
+    protected function data(SimpleExcelWriter $writer): void
+    {
+        $writer->addRow(['Aviato']);
+
+        throw new RuntimeException('The database went away.');
+    }
+}
+
+class WatchingExporterForSpreadsheetTest extends SpreadsheetExporter
+{
+    public static ?Closure $watch = null;
+
+    protected function data(SimpleExcelWriter $writer): void
+    {
+        $writer->addRow(['Aviato']);
+
+        (static::$watch)();
     }
 }

@@ -70,6 +70,8 @@ An exporter always writes its file to the local staging disk first, because the 
 
 The sweep deletes files in the staging directory that are older than `staging_files_after_hours`. Use a directory, or a disk, that only the engine uses.
 
+An Excel writer builds its file in a temporary folder before it zips it. Each writer gets its own folder in `spreadsheets.temp_directory`, named `export-engine-<uuid>`. The engine deletes the folder when the writer closes or fails, when a queued job times out, and when PHP stops with a fatal error. A worker that is killed from outside, for example by the out-of-memory killer, still leaves its folder. Delete old folders in that directory on a schedule.
+
 ## Usage
 
 ### Write an exporter
@@ -384,6 +386,7 @@ Read `config/export-engine.php` for all the options. The most important are:
 | `abandoned_after_minutes` | `1440` | How long an export can stay pending before the sweep fails it. |
 | `prune_after_days` | `null` | How long the records stay. Null keeps them always. |
 | `queue.queue` | `null` | The queue of queued exports. |
+| `spreadsheets.temp_directory` | `null` | Where Excel writers build their files. Null uses the temporary directory of the system. |
 
 ## Testing
 

@@ -149,9 +149,17 @@ return [
     |
     | "creator" goes into the properties of each workbook.
     |
+    | "temp_directory" is where an Excel writer builds its file before it
+    | zips it. Each writer gets its own folder in it, which the engine
+    | deletes when the writer is done, also when it fails. A worker that is
+    | killed from outside still leaves its folder, so delete old folders in
+    | this directory on a schedule. Null uses the temporary directory of
+    | the system.
+    |
     */
     'spreadsheets' => [
         'creator' => env('EXPORT_ENGINE_SPREADSHEET_CREATOR', env('APP_NAME', 'Laravel')),
+        'temp_directory' => env('EXPORT_ENGINE_SPREADSHEET_TEMP_DIRECTORY'),
     ],
 
     /*

@@ -75,6 +75,9 @@ class OpenSpout
      * writer, but SimpleExcel makes the writer with no options. Thus the
      * engine replaces the writer of SimpleExcel before it opens the file.
      *
+     * An Excel writer builds the file in $tempFolder, or in the temporary
+     * directory of the system when it is null.
+     *
      * @param  Closure(\OpenSpout\Writer\WriterInterface): void|null  $configureWriter
      */
     public static function createWriter(
@@ -83,15 +86,20 @@ class OpenSpout
         string $creator,
         ?string $delimiter = null,
         ?Closure $configureWriter = null,
+        ?string $tempFolder = null,
     ): SimpleExcelWriter {
         if (! static::isVersion5() || $type !== 'xlsx') {
             return SimpleExcelWriter::create(
                 file: $path,
                 type: $type,
-                configureWriter: function ($writer) use ($creator, $configureWriter) {
+                configureWriter: function ($writer) use ($creator, $configureWriter, $tempFolder) {
                     if ($writer instanceof XLSX\Writer) {
                         $writer->setCreator($creator);
                         $writer->getOptions()->SHOULD_USE_INLINE_STRINGS = false;
+
+                        if ($tempFolder !== null) {
+                            $writer->getOptions()->setTempFolder($tempFolder);
+                        }
                     }
 
                     if ($configureWriter !== null) {
@@ -105,6 +113,7 @@ class OpenSpout
         $writer = new XLSX\Writer(new XLSX\Options(
             SHOULD_USE_INLINE_STRINGS: false,
             properties: new XLSX\Properties(creator: $creator, lastModifiedBy: $creator),
+            tempFolder: $tempFolder,
         ));
 
         $simpleExcelWriter = (new ReflectionClass(SimpleExcelWriter::class))->newInstanceWithoutConstructor();
@@ -122,6 +131,23 @@ class OpenSpout
         $writer->openToFile($path);
 
         return $simpleExcelWriter;
+    }
+
+    /**
+     * Stop a writer that failed, without finishing its file.
+     *
+     * SimpleExcel closes its writer when PHP destroys it, and closing an
+     * Excel writer zips everything written so far. After a failure that is
+     * wasted work on a file nobody wants, and it fails again when the disk
+     * is full. Thus the writer gets a new writer that never opened, which
+     * has nothing to close. PHP closes the files of the old writer when it
+     * destroys it.
+     */
+    public static function discard(SimpleExcelWriter $writer): void
+    {
+        Closure::bind(function () {
+            $this->writer = new \OpenSpout\Writer\CSV\Writer;
+        }, $writer, SimpleExcelWriter::class)();
     }
 
     /**

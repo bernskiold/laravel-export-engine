@@ -3,8 +3,11 @@
 namespace Bernskiold\ExportEngine;
 
 use Bernskiold\ExportEngine\Contracts\WithHeader;
+use Bernskiold\ExportEngine\Support\OpenSpout;
+use Bernskiold\ExportEngine\Support\WriterTempFolders;
 use Illuminate\Support\Facades\File;
 use Spatie\SimpleExcel\SimpleExcelWriter;
+use Throwable;
 
 /**
  * Writes a CSV or Excel file to a local path, with no export record. Use it
@@ -42,20 +45,36 @@ abstract class SimpleExporter
 
         File::ensureDirectoryExists($this->directoryPath());
 
-        $writer = SimpleExcelWriter::create(
-            file: $this->filePath(),
-            type: $this->fileFormat(),
-            delimiter: ',',
-        );
+        $tempFolder = WriterTempFolders::create();
 
-        if ($this instanceof WithHeader) {
-            $writer->addHeader($this->header());
-        } else {
-            $writer->noHeaderRow();
+        try {
+            $writer = OpenSpout::createWriter(
+                path: $this->filePath(),
+                type: $this->fileFormat(),
+                creator: (string) config('export-engine.spreadsheets.creator'),
+                delimiter: ',',
+                tempFolder: $tempFolder,
+            );
+
+            if ($this instanceof WithHeader) {
+                $writer->addHeader($this->header());
+            } else {
+                $writer->noHeaderRow();
+            }
+
+            $this->data($writer);
+            $writer->close();
+        } catch (Throwable $exception) {
+            if (isset($writer)) {
+                OpenSpout::discard($writer);
+            }
+
+            File::delete($this->filePath());
+
+            throw $exception;
+        } finally {
+            WriterTempFolders::delete($tempFolder);
         }
-
-        $this->data($writer);
-        $writer->close();
 
         $this->outputPath = $this->filePath();
 

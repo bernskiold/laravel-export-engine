@@ -14,6 +14,7 @@ use Bernskiold\ExportEngine\Models\Export;
 use Bernskiold\ExportEngine\Support\ExportRunner;
 use Bernskiold\ExportEngine\Support\OpenSpout;
 use Bernskiold\ExportEngine\Support\Staging;
+use Bernskiold\ExportEngine\Support\WriterTempFolders;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\File;
 use OpenSpout\Common\Entity\Style\Style;
@@ -21,6 +22,7 @@ use OpenSpout\Writer\CSV;
 use OpenSpout\Writer\WriterInterface;
 use OpenSpout\Writer\XLSX;
 use Spatie\SimpleExcel\SimpleExcelWriter;
+use Throwable;
 
 /**
  * The base of an exporter that writes a CSV or Excel file.
@@ -76,46 +78,61 @@ abstract class SpreadsheetExporter implements Exporter
     {
         File::ensureDirectoryExists($this->directoryPath());
 
-        $writer = OpenSpout::createWriter(
-            path: $this->filePath(),
-            type: $this->export->format,
-            creator: (string) config('export-engine.spreadsheets.creator'),
-            delimiter: $this->export->format === 'csv' ? $this->delimiter : null,
-            configureWriter: function (WriterInterface $writer) {
-                if ($this instanceof ConfiguresWriter) {
-                    $this->writerOptions($writer);
-                }
-            },
-        );
+        $tempFolder = WriterTempFolders::create();
 
-        if ($this instanceof WithHeader) {
-            $writer->setHeaderStyle($this->headerStyle());
-            $writer->addHeader($this->headerFor($writer));
-        } else {
-            $writer->noHeaderRow();
-        }
-
-        $this->freezePanes($writer);
-
-        $excelWriter = $writer->getWriter();
-
-        if ($excelWriter instanceof XLSX\Writer) {
-            $excelWriter->getCurrentSheet()->setName(
-                str($this->sheetName())->limit(31, '')->toString()
+        try {
+            $writer = OpenSpout::createWriter(
+                path: $this->filePath(),
+                type: $this->export->format,
+                creator: (string) config('export-engine.spreadsheets.creator'),
+                delimiter: $this->export->format === 'csv' ? $this->delimiter : null,
+                configureWriter: function (WriterInterface $writer) {
+                    if ($this instanceof ConfiguresWriter) {
+                        $this->writerOptions($writer);
+                    }
+                },
+                tempFolder: $tempFolder,
             );
-        }
 
-        $this->data($writer);
-
-        if ($this instanceof SizesColumns && $excelWriter instanceof XLSX\Writer) {
-            $options = $excelWriter->getOptions();
-
-            foreach (array_values($this->columnSizes()) as $index => $width) {
-                $options->setColumnWidth($width, $index + 1);
+            if ($this instanceof WithHeader) {
+                $writer->setHeaderStyle($this->headerStyle());
+                $writer->addHeader($this->headerFor($writer));
+            } else {
+                $writer->noHeaderRow();
             }
-        }
 
-        $writer->close();
+            $this->freezePanes($writer);
+
+            $excelWriter = $writer->getWriter();
+
+            if ($excelWriter instanceof XLSX\Writer) {
+                $excelWriter->getCurrentSheet()->setName(
+                    str($this->sheetName())->limit(31, '')->toString()
+                );
+            }
+
+            $this->data($writer);
+
+            if ($this instanceof SizesColumns && $excelWriter instanceof XLSX\Writer) {
+                $options = $excelWriter->getOptions();
+
+                foreach (array_values($this->columnSizes()) as $index => $width) {
+                    $options->setColumnWidth($width, $index + 1);
+                }
+            }
+
+            $writer->close();
+        } catch (Throwable $exception) {
+            if (isset($writer)) {
+                OpenSpout::discard($writer);
+            }
+
+            File::delete($this->filePath());
+
+            throw $exception;
+        } finally {
+            WriterTempFolders::delete($tempFolder);
+        }
 
         static::afterExport($this->export);
 
