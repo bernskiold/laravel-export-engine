@@ -87,9 +87,9 @@ class OpenSpout
         ?string $delimiter = null,
         ?Closure $configureWriter = null,
         ?string $tempFolder = null,
-    ): SimpleExcelWriter {
+    ): GuardedWriter {
         if (! static::isVersion5() || $type !== 'xlsx') {
-            return SimpleExcelWriter::create(
+            return GuardedWriter::create(
                 file: $path,
                 type: $type,
                 configureWriter: function ($writer) use ($creator, $configureWriter, $tempFolder) {
@@ -116,7 +116,7 @@ class OpenSpout
             tempFolder: $tempFolder,
         ));
 
-        $simpleExcelWriter = (new ReflectionClass(SimpleExcelWriter::class))->newInstanceWithoutConstructor();
+        $simpleExcelWriter = (new ReflectionClass(GuardedWriter::class))->newInstanceWithoutConstructor();
 
         Closure::bind(function () use ($path, $writer) {
             $this->path = $path;

@@ -387,6 +387,9 @@ Read `config/export-engine.php` for all the options. The most important are:
 | `prune_after_days` | `null` | How long the records stay. Null keeps them always. |
 | `queue.queue` | `null` | The queue of queued exports. |
 | `spreadsheets.temp_directory` | `null` | Where Excel writers build their files. Null uses the temporary directory of the system. |
+| `spreadsheets.max_rows` | `null` | The most rows an Excel file can get. The writer throws at this row. |
+| `spreadsheets.max_cells` | `null` | The most cells an Excel export can have. Checked before it starts, for exporters that implement `EstimatesSize`. |
+| `spreadsheets.min_free_disk_mb` | `null` | The writer stops an export when its disk has less free space than this. |
 
 ## Testing
 

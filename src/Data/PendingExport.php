@@ -2,11 +2,15 @@
 
 namespace Bernskiold\ExportEngine\Data;
 
+use Bernskiold\ExportEngine\Contracts\EstimatesSize;
+use Bernskiold\ExportEngine\Contracts\WithHeader;
+use Bernskiold\ExportEngine\Exceptions\ExportTooLarge;
 use Bernskiold\ExportEngine\ExportEngine;
 use Bernskiold\ExportEngine\Models\Export;
 use Bernskiold\ExportEngine\Settings\ExportSettings;
 use Bernskiold\ExportEngine\Settings\ExportSettingsContext;
 use Bernskiold\ExportEngine\Support\ExportFileName;
+use Bernskiold\ExportEngine\Support\ExportRunner;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Contracts\Cache\Repository;
@@ -70,6 +74,8 @@ class PendingExport
      * Make the record of the export and start it.
      *
      * @param  array<string, mixed>|null  $settings
+     *
+     * @throws ExportTooLarge when the exporter counts more rows or cells than the limits.
      */
     public function start(?array $settings = null): Export
     {
@@ -77,7 +83,7 @@ class PendingExport
             throw new AuthorizationException(__('You do not have access to this export.'));
         }
 
-        $export = ExportEngine::model()::generate(
+        $export = ExportEngine::model()::draft(
             downloadFileName: ExportFileName::make($this->downloadName, $this->filenameLabels)->toString($this->format),
             format: $this->format,
             exporter: $this->exporter,
@@ -90,9 +96,43 @@ class PendingExport
             attributes: $this->attributes,
         );
 
+        $this->ensureNotTooLarge($export);
+
+        $export->save();
+
         $this->queued ? $export->dispatch() : $export->dispatchSync();
 
         return $export->fresh();
+    }
+
+    /**
+     * Refuse an Excel export that its exporter counts as too large, before
+     * it has a record or uses a worker.
+     *
+     * @throws ExportTooLarge
+     */
+    protected function ensureNotTooLarge(Export $export): void
+    {
+        $maxRows = config('export-engine.spreadsheets.max_rows');
+        $maxCells = config('export-engine.spreadsheets.max_cells');
+
+        if ($this->format !== 'xlsx' || ($maxRows === null && $maxCells === null)) {
+            return;
+        }
+
+        if (! is_a((string) $export->exporterClass(), EstimatesSize::class, true)) {
+            return;
+        }
+
+        /** @var EstimatesSize $exporter */
+        $exporter = app(ExportRunner::class)->exporterFor($export);
+
+        $rows = $exporter->estimatedRows();
+        $columns = $exporter instanceof WithHeader ? count($exporter->header()) : 1;
+
+        if (($maxRows !== null && $rows + 1 > $maxRows) || ($maxCells !== null && $rows * $columns > $maxCells)) {
+            throw ExportTooLarge::estimated($rows, $columns);
+        }
     }
 
     /**

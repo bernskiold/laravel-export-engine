@@ -156,10 +156,25 @@ return [
     | this directory on a schedule. Null uses the temporary directory of
     | the system.
     |
+    | The limits stop an export before it fills the disk. Null turns a limit
+    | off.
+    |
+    | - "max_rows": the most rows an Excel file can get, the header included.
+    |   The writer throws at this row. Without it, OpenSpout starts a new
+    |   sheet each time a sheet is full. Excel holds 1,048,576 rows a sheet.
+    | - "max_cells": the most rows times columns an Excel export can have.
+    |   The engine asks an exporter that implements `EstimatesSize` before
+    |   the export starts, and refuses an export over this or `max_rows`.
+    | - "min_free_disk_mb": the writer checks the free space of its folders
+    |   every 10,000 rows, and stops the export below this.
+    |
     */
     'spreadsheets' => [
         'creator' => env('EXPORT_ENGINE_SPREADSHEET_CREATOR', env('APP_NAME', 'Laravel')),
         'temp_directory' => env('EXPORT_ENGINE_SPREADSHEET_TEMP_DIRECTORY'),
+        'max_rows' => null,
+        'max_cells' => null,
+        'min_free_disk_mb' => null,
     ],
 
     /*

@@ -56,6 +56,8 @@ abstract class SimpleExporter
                 tempFolder: $tempFolder,
             );
 
+            $writer->stopBelowFreeSpace(config('export-engine.spreadsheets.min_free_disk_mb'), [$tempFolder, $this->directoryPath()]);
+
             if ($this instanceof WithHeader) {
                 $writer->addHeader($this->header());
             } else {

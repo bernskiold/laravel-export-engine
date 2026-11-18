@@ -150,7 +150,42 @@ class Export extends Model
         ?array $settings = null,
         array $attributes = [],
     ): static {
-        return static::query()->create([
+        return tap(static::draft(
+            downloadFileName: $downloadFileName,
+            format: $format,
+            exporter: $exporter,
+            filters: $filters,
+            options: $options,
+            userId: $userId,
+            jobClass: $jobClass,
+            name: $name,
+            settings: $settings,
+            attributes: $attributes,
+        ))->save();
+    }
+
+    /**
+     * Make a new export without saving it, for example to ask its exporter
+     * a question before the export starts.
+     *
+     * @param  array<string, mixed>  $filters
+     * @param  array<string, mixed>  $options
+     * @param  array<string, mixed>|null  $settings
+     * @param  array<string, mixed>  $attributes  More columns to fill, for columns your own model adds.
+     */
+    public static function draft(
+        string $downloadFileName,
+        string $format,
+        ?string $exporter = null,
+        array $filters = [],
+        array $options = [],
+        int|string|null $userId = null,
+        ?string $jobClass = null,
+        ?string $name = null,
+        ?array $settings = null,
+        array $attributes = [],
+    ): static {
+        return static::query()->make([
             'download_name' => $downloadFileName,
             'format' => $format,
             'job' => $jobClass,

@@ -94,6 +94,10 @@ abstract class SpreadsheetExporter implements Exporter
                 tempFolder: $tempFolder,
             );
 
+            $writer
+                ->limitRows($this->export->format === 'xlsx' ? config('export-engine.spreadsheets.max_rows') : null)
+                ->stopBelowFreeSpace(config('export-engine.spreadsheets.min_free_disk_mb'), [$tempFolder, $this->directoryPath()]);
+
             if ($this instanceof WithHeader) {
                 $writer->setHeaderStyle($this->headerStyle());
                 $writer->addHeader($this->headerFor($writer));
