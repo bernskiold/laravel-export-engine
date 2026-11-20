@@ -24,7 +24,7 @@ The engine is headless. It has no views and no components. Your application show
 ## Requirements
 
 - PHP 8.4 or later
-- Laravel 12 or 13
+- Laravel 12 or 13 (on PHP 8.6, the package is tested with Laravel 13 only)
 - OpenSpout 4.30 or later, or OpenSpout 5
 
 ## Installation
