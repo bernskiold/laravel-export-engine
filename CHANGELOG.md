@@ -2,7 +2,7 @@
 
 All notable changes to `laravel-export-engine` are in this file.
 
-## Unreleased
+## 1.1.0 - 2026-11-20
 
 - Each Excel writer builds its file in its own temporary folder. The engine deletes the folder when the export fails, when a queued job times out and when PHP stops with a fatal error. Before, a failed export left its OpenSpout folder in the temporary directory of the system.
 - A failed export no longer finishes its partial file, and deletes it.
